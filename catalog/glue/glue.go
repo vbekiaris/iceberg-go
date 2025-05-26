@@ -128,6 +128,7 @@ type Catalog struct {
 	glueSvc   glueAPI
 	catalogId *string
 	awsCfg    *aws.Config
+	fsLoader  FSLoaderFunction
 }
 
 // NewCatalog creates a new instance of glue.Catalog with the given options.
@@ -145,10 +146,16 @@ func NewCatalog(opts ...Option) *Catalog {
 		catalogId = nil
 	}
 
+	fsLoaderFn := io.LoadFS
+	if glueOps.fsLoaderFn != nil {
+		fsLoaderFn = glueOps.fsLoaderFn
+	}
+
 	return &Catalog{
 		glueSvc:   glue.NewFromConfig(glueOps.awsConfig),
 		catalogId: catalogId,
 		awsCfg:    &glueOps.awsConfig,
+		fsLoader:  fsLoaderFn,
 	}
 }
 
@@ -212,7 +219,7 @@ func (c *Catalog) LoadTable(ctx context.Context, identifier table.Identifier, pr
 
 	ctx = utils.WithAwsConfig(ctx, c.awsCfg)
 	// TODO: consider providing a way to directly access the S3 iofs to enable testing of the catalog.
-	iofs, err := io.LoadFS(ctx, props, location)
+	iofs, err := c.fsLoader(ctx, props, location)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load table %s.%s: %w", database, tableName, err)
 	}
